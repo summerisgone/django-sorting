@@ -104,8 +104,8 @@ class SortedDataNode(template.Node):
                 context[key] = value
         else:
             context[key] = value
+        return u''
 
-        return ''
 
 anchor = register.tag(anchor)
 autosort = register.tag(autosort)
