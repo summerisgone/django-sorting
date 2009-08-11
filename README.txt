@@ -63,6 +63,27 @@ your objects_list:
         ...
     </tr>
 
+7.  You can override default anchor template overriding 'django_sorting/anchor.html'
+    template.
+
+    For example, this is default template:  
+
+        <a href="{{ url }}" title="{{ title }}"
+            {% if class %}class="{{ class }}"{% endif %}
+            {% if rel %}rel="{{ rel }}"{% endif %}
+        title="{{ title }}">{{ title }} {{ icon }}</a>
+
+    In this template you can use context variables:
+        
+        url          - href url
+        title        - title block tag attribue e.g. {% anchor param 'Title' %}
+        icon         - DEFAULT_SORT_UP or DOWN symbol
+        inverse_icon - if objects are sorted, contains sybmol for show
+                       *current* ordering
+        class        - anchor class
+        rel          - anchor rel attribute
+        urlappend    - url GET parameters
+        sortdir      - sort direction
 
 That's it!  
 
