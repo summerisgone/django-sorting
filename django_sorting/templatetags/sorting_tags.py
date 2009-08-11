@@ -15,19 +15,29 @@ sort_directions = {
     '': {'icon':DEFAULT_SORT_DOWN, 'inverse': 'asc'}, 
 }
 
+
 def anchor(parser, token):
     """
-    Parses a tag that's supposed to be in this format: {% anchor field title %}    
+    Parses a tag that's supposed to be in this format:
+    {% anchor field title anchor_class anchor_rel %}
+    where the 'title', 'anchor_class' and 'anchor_rel' arguments are optional.
     """
     bits = [b.strip('"\'') for b in token.split_contents()]
     if len(bits) < 2:
-        raise TemplateSyntaxError, "anchor tag takes at least 1 argument"
+        raise template.TemplateSyntaxError(
+            "anchor tag takes at least 1 argument")
     try:
         title = bits[2]
     except IndexError:
         title = bits[1].capitalize()
+    if len(bits) >= 4:
+        # User specified the anchor_class and anchor_rel arguments
+        anchor_class = bits[len(bits)-2]
+        anchor_rel = bits[len(bits)-1]
+        return SortAnchorNode(bits[1].strip(), title.strip(),
+                              anchor_class.strip(), anchor_rel.strip())
     return SortAnchorNode(bits[1].strip(), title.strip())
-    
+
 
 class SortAnchorNode(template.Node):
     """
@@ -41,9 +51,15 @@ class SortAnchorNode(template.Node):
         <a href="/the/current/path/?sort=name" title="Name">Name</a>
 
     """
-    def __init__(self, field, title):
+    def __init__(self, field, title, anchor_class=None, anchor_rel=None):
         self.field = field
         self.title = title
+        self.anchor_class = ""
+        self.anchor_rel = ""
+        if anchor_class is not None:
+            self.anchor_class = ' class="%s"' % anchor_class
+        if anchor_rel is not None:
+            self.anchor_rel = ' rel="%s"' % anchor_rel
 
     def render(self, context):
         request = context['request']
@@ -73,13 +89,15 @@ class SortAnchorNode(template.Node):
             title = self.title
 
         url = '%s?sort=%s%s' % (request.path, self.field, urlappend)
-        return '<a href="%s" title="%s">%s</a>' % (url, self.title, title)
+        return '<a href="%s" title="%s"%s%s>%s</a>' \
+               % (url, self.title, self.anchor_class, self.anchor_rel, title)
 
 
 def autosort(parser, token):
     bits = [b.strip('"\'') for b in token.split_contents()]
     if len(bits) != 2:
-        raise TemplateSyntaxError, "autosort tag takes exactly one argument"
+        raise template.TemplateSyntaxError(
+            "autosort tag takes ecxactly one argument")
     return SortedDataNode(bits[1])
 
 class SortedDataNode(template.Node):
@@ -107,6 +125,42 @@ class SortedDataNode(template.Node):
         return u''
 
 
+def anchor(context, field, title, anchor_class=None, anchor_rel=None):
+    request = context['request']
+    getvars = request.GET.copy()
+    if 'sort' in getvars:
+        sortby = getvars['sort']
+        del getvars['sort']
+    else:
+        sortby = ''
+    if 'dir' in getvars:
+        sortdir = getvars['dir']
+        del getvars['dir']
+    else:
+        sortdir = ''
+    if sortby == field:
+        getvars['dir'] = sort_directions[sortdir]['inverse']
+        icon = sort_directions[sortdir]['icon']
+    else:
+        icon = ''
+    if len(getvars.keys()) > 0:
+        urlappend = "&%s" % getvars.urlencode()
+    else:
+        urlappend = ''
+    reverse = sort_directions[sortdir]['inverse']
+
+    url = '%s?sort=%s%s' % (request.path, field, urlappend)
+    return {
+        'url': url,
+        'title': title,
+        'icon': icon,
+        'inverse_icon': '' if icon == '' else sort_directions[reverse]['icon'],
+        'class': anchor_class,
+        'rel': anchor_rel,
+        'urlappend': urlappend,
+        'sortdir': sortdir,
+    }
+
 anchor = register.tag(anchor)
 autosort = register.tag(autosort)
-
+register.inclusion_tag('django_sorting/anchor.html', takes_context=True)(anchor)
