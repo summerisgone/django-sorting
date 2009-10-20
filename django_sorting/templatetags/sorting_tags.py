@@ -1,3 +1,6 @@
+"""Template tags used to sort a queryset.
+"""
+
 from django import template
 from django.http import Http404
 from django.conf import settings
@@ -100,6 +103,39 @@ def autosort(parser, token):
             "autosort tag takes ecxactly one argument")
     return SortedDataNode(bits[1])
 
+def attribute_lookup_factory(order_by):
+    '''Returns function with django-db-like attribute lookup.
+    Example: 
+    '''
+    keys = order_by.split('__')
+
+    def attribute_lookup(obj):
+        parent_obj = obj
+        attr_obj = None
+        
+        for key in keys:
+            # lookup parameters order:
+            # 1. dictionary lookup
+            # 2. method call
+            # 3. attribute
+            if hasattr(parent_obj, '__iter__'):
+                if key in parent_obj:
+                    attr_obj = parent_obj[key]
+                    parent_obj = attr_obj
+            elif hasattr(parent_obj, key):
+                attr_obj = getattr(parent_obj, key)
+                if hasattr(attr_obj, '__call__'):
+                    if not getattr(attr_obj, 'alters_data', False):
+                        parent_obj = attr_obj()
+                else:
+                    parent_obj = attr_obj
+            else:
+                break
+        return parent_obj
+
+    return attribute_lookup
+
+
 class SortedDataNode(template.Node):
     """
     Automatically sort a queryset with {% autosort queryset %}
@@ -115,10 +151,19 @@ class SortedDataNode(template.Node):
         if len(order_by) > 1:
             try:
                 context[key] = value.order_by(order_by)
+            except AttributeError:
+                if order_by[0] == '-':
+                    reverse = True
+                    order_by = order_by[1:]
+                else:
+                    reverse = False
+                context[key] = sorted(value, key=attribute_lookup_factory(order_by),
+                    reverse=reverse)
             except template.TemplateSyntaxError:
                 if INVALID_FIELD_RAISES_404:
-                    raise Http404('Invalid field sorting. If DEBUG were set to ' +
-                    'False, an HTTP 404 page would have been shown instead.')
+                    raise Http404(
+                        'Invalid field sorting. If DEBUG were set to False, '
+                        'an HTTP 404 page would have been shown instead.')
                 context[key] = value
         else:
             context[key] = value
